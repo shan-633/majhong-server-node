@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>四川麻将 · Sichuan Mahjong</title>
+<style>
+  :root { --green: #0a6c3d; --tile: #fafaf5; --ink: #1a1a1a; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: system-ui, "PingFang SC", "Microsoft YaHei", sans-serif;
+         background: var(--green); color: #fff; }
+  header { padding: 10px 16px; background: rgba(0,0,0,.25); display: flex; gap: 8px;
+           align-items: center; flex-wrap: wrap; }
+  h1 { font-size: 18px; margin: 0 12px 0 0; }
+  input, button, select { font-size: 14px; padding: 6px 10px; border-radius: 6px;
+           border: 1px solid #0003; }
+  button { background: #ffd54a; color: #222; cursor: pointer; font-weight: 600; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  main { padding: 16px; display: grid; gap: 16px; grid-template-columns: 1fr 320px; }
+  .panel { background: rgba(0,0,0,.18); border-radius: 10px; padding: 12px; }
+  .seats { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; }
+  .seat { background: rgba(255,255,255,.08); border-radius: 8px; padding: 8px; font-size: 13px; }
+  .seat.current { outline: 2px solid #ffd54a; }
+  .seat.me { background: rgba(255,213,74,.2); }
+  .tiles { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+  .tile { background: var(--tile); color: var(--ink); border-radius: 6px; padding: 6px 8px;
+          min-width: 30px; text-align: center; font-weight: 700; cursor: pointer;
+          border: 1px solid #0002; box-shadow: 0 1px 2px #0003; }
+  .tile.m { color: #b5651d; } .tile.p { color: #1565c0; } .tile.s { color: #2e7d32; }
+  .tile.disabled { opacity: .35; cursor: default; }
+  .actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  #log { font-family: ui-monospace, monospace; font-size: 12px; height: 360px; overflow:auto;
+         white-space: pre-wrap; line-height: 1.4; }
+  .muted { opacity: .7; }
+  .suit-pick button { background:#fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>四川血战到底</h1>
+  <input id="room" placeholder="room (default)" value="default" />
+  <input id="name" placeholder="your name" value="Me" />
+  <button id="joinBtn">Join</button>
+  <button id="startBtn" disabled>Start (fill bots)</button>
+  <span id="status" class="muted"></span>
+</header>
+
+<main>
+  <section class="panel">
+    <div class="seats" id="seats"></div>
+
+    <div id="suitPick" class="suit-pick" style="display:none; margin-top:14px;">
+      <strong>定缺 — choose the suit you will void:</strong>
+      <div class="actions">
+        <button data-suit="0">万 wan</button>
+        <button data-suit="1">筒 tong</button>
+        <button data-suit="2">条 tiao</button>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:4px;">Your hand <span id="missing" class="muted"></span></h3>
+    <div class="tiles" id="hand"></div>
+    <div class="actions" id="actions"></div>
+  </section>
+
+  <section class="panel">
+    <h3 style="margin-top:0;">Game log</h3>
+    <div id="log"></div>
+  </section>
+</main>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+  const socket = io();
+  const $ = (id) => document.getElementById(id);
+  const SUIT = ['m','p','s'];               // wan/tong/tiao ascii classes
+  const SUIT_CN = ['万','筒','条'];
+  let mySeat = null, lastState = null;
+
+  const rank = (id) => (id % 9) + 1;
+  const suit = (id) => Math.floor(id / 9);
+  const tileLabel = (id) => rank(id) + SUIT_CN[suit(id)];
+
+  function log(line) {
+    const el = $('log');
+    el.textContent += line + '\n';
+    el.scrollTop = el.scrollHeight;
+  }
+
+  $('joinBtn').onclick = () => {
+    socket.emit('room:join', { room: $('room').value || 'default', name: $('name').value });
+  };
+  $('startBtn').onclick = () => socket.emit('room:start', { fillBots: true });
+
+  document.querySelectorAll('#suitPick button').forEach((b) => {
+    b.onclick = () => socket.emit('game:chooseSuit', { suit: Number(b.dataset.suit) });
+  });
+
+  socket.on('joined', ({ room, seat }) => {
+    mySeat = seat;
+    $('status').textContent = `joined ${room} as seat ${seat}`;
+    $('startBtn').disabled = false;
+  });
+
+  socket.on('error', ({ message }) => log('⚠️  ' + message));
+
+  socket.on('event', (e) => {
+    const p = (s) => (s == null ? '—' : 'P' + s);
+    switch (e.type) {
+      case 'suitChosen': log(`定缺 ${p(e.seat)} → ${SUIT_CN[e.suit]}`); break;
+      case 'discard': log(`打 ${p(e.seat)} ${tileLabel(e.tile)}`); break;
+      case 'peng': log(`碰 ${p(e.seat)} ${tileLabel(e.tile)} (from ${p(e.from)})`); break;
+      case 'gang': log(`杠 ${p(e.seat)} ${e.kind} ${tileLabel(e.tile)}`); break;
+      case 'gangPay': log(`刮风下雨 ${p(e.from)}→${p(e.to)} ${e.points}`); break;
+      case 'hu': log(`胡! ${p(e.seat)} ${e.selfDraw?'自摸':'点炮'+p(e.from)} ${tileLabel(e.tile)} +${e.points} [${e.patterns.join(', ')}]`); break;
+      case 'chaDaJiao': log(`查叫 ${p(e.from)}→${p(e.to)} ${e.points}`); break;
+      case 'huaZhu': log(`花猪 ${p(e.seat)}→${p(e.to)} ${e.points}`); break;
+      case 'tuiShui': log(`退税 ${p(e.seat)}→${p(e.to)} ${e.points}`); break;
+      case 'settled':
+        log(`=== Settled (${e.reason}) ===`);
+        e.scores.forEach((s) => log(`  ${p(s.seat)} ${s.hasWon?'✓':' '} ${s.score>=0?'+':''}${s.score}`));
+        break;
+    }
+  });
+
+  socket.on('state', (st) => { lastState = st; render(st); });
+
+  function render(st) {
+    // Seats
+    const seats = $('seats'); seats.innerHTML = '';
+    st.players.forEach((pl) => {
+      const d = document.createElement('div');
+      d.className = 'seat' + (pl.seat === st.currentSeat ? ' current' : '') + (pl.seat === mySeat ? ' me' : '');
+      const miss = pl.missingSuit != null ? `定缺${SUIT_CN[pl.missingSuit]}` : '';
+      const melds = (pl.melds || []).map((m) => `${m.type}:${tileLabel(m.tile)}`).join(' ');
+      d.innerHTML = `<b>P${pl.seat}</b> ${pl.name||''} ${pl.hasWon?'✓':''}<br>` +
+        `<span class="muted">${miss} · tiles ${pl.handCount} · score ${pl.score}</span>` +
+        (melds ? `<br><span class="muted">${melds}</span>` : '');
+      seats.appendChild(d);
+    });
+
+    $('status').textContent =
+      `phase ${st.phase}${st.turnState?'/'+st.turnState:''} · wall ${st.wallRemaining} · winners ${st.winnersCount}`;
+
+    // 定缺 picker
+    $('suitPick').style.display =
+      (st.phase === 'choosing_suit' && st.missingSuit == null && mySeat != null) ? 'block' : 'none';
+
+    // Hand
+    $('missing').textContent = st.missingSuit != null ? `(void ${SUIT_CN[st.missingSuit]})` : '';
+    const hand = $('hand'); hand.innerHTML = '';
+    const canDiscard = (st.availableActions||[]).includes('discard');
+    (st.hand || []).forEach((id) => {
+      const t = document.createElement('div');
+      t.className = 'tile ' + SUIT[suit(id)] + (canDiscard ? '' : ' disabled');
+      t.textContent = tileLabel(id);
+      if (canDiscard) t.onclick = () => socket.emit('game:action', { action: 'discard', tile: id });
+      hand.appendChild(t);
+    });
+
+    // Action buttons (hu / peng / gang / pass)
+    const acts = $('actions'); acts.innerHTML = '';
+    (st.availableActions || []).forEach((a) => {
+      if (a === 'discard') return; // handled by clicking tiles
+      const b = document.createElement('button');
+      b.textContent = a.toUpperCase();
+      b.onclick = () => socket.emit('game:action', { action: a });
+      acts.appendChild(b);
+    });
+  }
+</script>
+</body>
+</html>

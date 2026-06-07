@@ -1,0 +1,29 @@
+{
+  "name": "majhong-server-node",
+  "version": "1.0.0",
+  "description": "Sichuan Mahjong (四川血战到底麻将) game server in Node.js with a Socket.IO realtime layer.",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test",
+    "demo": "node scripts/demo.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mahjong",
+    "majhong",
+    "sichuan",
+    "xuezhandaodi",
+    "game-server",
+    "socket.io"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "socket.io": "^4.7.5"
+  }
+}
