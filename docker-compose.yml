@@ -1,0 +1,10 @@
+services:
+  majhong:
+    build: .
+    image: majhong-server:latest
+    container_name: majhong-server
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
