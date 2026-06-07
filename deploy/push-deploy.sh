@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 #
 # Run this FROM YOUR LOCAL MACHINE (one that can reach the server over SSH).
-# It copies remote-setup.sh to the server and executes it over SSH.
+# It copies remote-setup.sh to the server and executes it over SSH. The remote
+# script performs a Docker-based deploy (installs Docker, builds the image, and
+# runs the container with a restart policy).
 #
 # Usage:
 #   ./deploy/push-deploy.sh [user@host] [port]

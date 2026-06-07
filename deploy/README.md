@@ -9,9 +9,9 @@ server listening on `PORT` (default `3000`) with a health endpoint at
 
 ## Option A — one command on the server (recommended)
 
-SSH into the box and run the setup script. It installs Node.js 20, clones the
-repo, installs dependencies, and registers a `systemd` service that restarts on
-failure and on boot.
+SSH into the box and run the setup script. It installs **Docker** (if missing),
+clones the repo, builds the image, and runs the app as a container with a
+`restart unless-stopped` policy (so it survives reboots and crashes).
 
 ```bash
 ssh root@45.76.49.222
@@ -26,10 +26,14 @@ checkout.
 Manage it afterwards:
 
 ```bash
-systemctl status majhong
-journalctl -u majhong -f      # live logs
-systemctl restart majhong
+docker ps                       # see the running container
+docker logs -f majhong-server   # live logs
+docker restart majhong-server
+docker rm -f majhong-server     # stop & remove
 ```
+
+To redeploy after new commits, just re-run the same `curl … | bash` line — the
+script pulls the latest branch and rebuilds the image.
 
 ## Option B — push from your laptop over SSH
 
@@ -42,9 +46,9 @@ From a machine that can reach the server (this script needs an SSH client):
 It copies `remote-setup.sh` to the server and runs it. You'll be prompted for
 the SSH password unless you use a key.
 
-## Option C — Docker
+## Option C — Docker by hand (no setup script)
 
-On any host with Docker:
+If you already have the repo checked out on a host with Docker:
 
 ```bash
 docker compose up -d --build
